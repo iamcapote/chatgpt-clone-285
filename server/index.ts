@@ -28,7 +28,9 @@ export async function createServer() {
       // Custom logic to handle multiple origins if needed
       const allowedOrigins = [
         'https://bookish-robot-r7779gg5695hpr95-8081.app.github.dev',
-        'https://bookish-robot-r7779gg5695hpr95-8082.app.github.dev'
+        'https://bookish-robot-r7779gg5695hpr95-8082.app.github.dev',
+        'https://canvas.bitwiki.org',
+        'http://canvas.bitwiki.org'
       ];
 
       // If CORS_ORIGIN is set, add it to allowed origins
