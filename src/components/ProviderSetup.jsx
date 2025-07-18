@@ -16,7 +16,7 @@ const ProviderSetup = ({ userId, onComplete }) => {
   const { toast } = useToast();
   const [providers, setProviders] = useState([]);
   const [apiKeys, setApiKeys] = useState({});
-  const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [selectedProvider, setSelectedProvider] = useState('venice');
   const [showApiKeys, setShowApiKeys] = useState({});
   const [isValid, setIsValid] = useState(false);
 

@@ -31,7 +31,7 @@ const defaultProviders = [
     providerId: 'venice',
     name: 'Venice AI',
     baseURL: 'https://api.venice.ai/api/v1',
-    models: ['gpt-4o', 'claude-3.5-sonnet', 'llama-3.1-70b'],
+    models: ['venice-uncensored', 'qwen-2.5-qwq-32b', 'mistral-31-24b', 'qwen3-235b', 'llama-3.2-3b', 'llama-3.1-405b', 'qwen-2.5-coder-32b', 'deepseek-r1-671b'],
     isActive: false,
     headers: {},
   },

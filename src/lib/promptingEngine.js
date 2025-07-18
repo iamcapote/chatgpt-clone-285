@@ -11,7 +11,7 @@ export class PromptingEngine {
   }
 
   // Mode 1: Text-to-Workflow Conversion
-  async convertTextToWorkflow(textInput, apiKey, providerId = 'openai', model = 'gpt-4o') {
+  async convertTextToWorkflow(textInput, apiKey, providerId = 'venice', model = 'venice-uncensored') {
     const systemPrompt = `You are a semantic logic workflow converter. Convert the provided text into a structured workflow using our semantic node ontology.
 
 Available Node Types:
@@ -94,8 +94,8 @@ Position nodes logically from left to right, top to bottom. Use appropriate sema
     const {
       temperature = 0.7,
       maxTokens = 1500,
-      providerId = 'openai',
-      model = 'gpt-4o',
+      providerId = 'venice',
+      model = 'venice-uncensored',
       apiKey
     } = executionSettings;
 
@@ -159,8 +159,8 @@ Process the workflow systematically and provide detailed reasoning for each node
     const {
       temperature = 0.7,
       maxTokens = 800,
-      providerId = 'openai',
-      model = 'gpt-4o',
+      providerId = 'venice',
+      model = 'venice-uncensored',
       apiKey
     } = context;
 

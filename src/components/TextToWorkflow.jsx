@@ -14,8 +14,8 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
   const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState('openai');
-  const [selectedModel, setSelectedModel] = useState('gpt-4o');
+  const [selectedProvider, setSelectedProvider] = useState('venice');
+  const [selectedModel, setSelectedModel] = useState('venice-uncensored');
   const [availableProviders, setAvailableProviders] = useState([]);
   const [promptingEngine] = useState(() => new PromptingEngine(trpcVanilla, "demo-user"));
 
