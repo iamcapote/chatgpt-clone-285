@@ -6,85 +6,102 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { trpc } from "./lib/trpc";
 import { httpBatchLink } from '@trpc/client';
+import { AppProvider, useApp } from './context/AppContext';
 import ChatPage from "./pages/ChatPage";
 import WorkflowBuilderPage from "./pages/WorkflowBuilderPage";
 import LandingPage from "./pages/LandingPage";
+import ProviderSetup from "./components/ProviderSetup"; // Renamed for clarity
 
 const queryClient = new QueryClient();
 
-// Create TRPC client with correct API URL
-const trpcClient = trpc.createClient({
-  links: [
-    httpBatchLink({
-      url: typeof window !== 'undefined' && window.location.hostname.includes('app.github.dev')
-        ? 'http://localhost:3002/api/trpc'  // Use localhost in Codespaces
-        : typeof window !== 'undefined' 
-          ? `${window.location.protocol}//${window.location.hostname.replace('8081', '3002')}/api/trpc`
-          : 'http://localhost:3002/api/trpc',
-      headers: () => {
-        return {};
-      },
-    }),
-  ],
-});
-
-const App = () => {
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Check for API key on mount
-    const checkApiKey = () => {
-      const storedApiKey = sessionStorage.getItem('openai_api_key');
-      setHasApiKey(!!storedApiKey);
-      setIsLoading(false);
-    };
-    
-    checkApiKey();
-    
-    // Listen for storage changes
-    window.addEventListener('storage', checkApiKey);
-    
-    return () => {
-      window.removeEventListener('storage', checkApiKey);
-    };
-  }, []);
+const AppContent = () => {
+  const { isLoading, activeProvider, userId } = useApp();
   
-  // Add a method to refresh the API key state
-  const refreshApiKeyState = () => {
-    const storedApiKey = sessionStorage.getItem('openai_api_key');
-    setHasApiKey(!!storedApiKey);
-  };
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
+      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+        <div className="animate-spin h-10 w-10 border-b-2 border-white rounded-full"></div>
       </div>
     );
   }
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <Toaster />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={hasApiKey ? <WorkflowBuilderPage /> : <LandingPage onApiKeySet={refreshApiKeyState} />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/setup" element={<LandingPage onApiKeySet={refreshApiKeyState} />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </QueryClientProvider>
-      </trpc.Provider>
-    </ThemeProvider>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/setup" element={
+          <div className="flex items-center justify-center h-screen bg-gray-900">
+            <ProviderSetup userId={userId} onComplete={() => window.location.href = '/workflow'} />
+          </div>
+        } 
+      />
+      <Route 
+        path="/workflow" 
+        element={activeProvider ? <WorkflowBuilderPage /> : <Navigate to="/setup" />} 
+      />
+      <Route 
+        path="/chat" 
+        element={activeProvider ? <ChatPage /> : <Navigate to="/setup" />} 
+      />
+    </Routes>
   );
 };
+
+function App() {
+  const [userId, setUserId] = useState(null);
+  const [trpcClient, setTrpcClient] = useState(() =>
+    trpc.createClient({
+      links: [
+        httpBatchLink({
+          url: 'http://localhost:3002/api/trpc',
+        }),
+      ],
+    })
+  );
+
+  useEffect(() => {
+    let storedUserId = localStorage.getItem('userId');
+    if (!storedUserId) {
+      storedUserId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      localStorage.setItem('userId', storedUserId);
+    }
+    setUserId(storedUserId);
+
+    setTrpcClient(trpc.createClient({
+      links: [
+        httpBatchLink({
+          url: typeof window !== 'undefined' && window.location.hostname.includes('app.github.dev')
+            ? 'http://localhost:3002/api/trpc'
+            : typeof window !== 'undefined'
+              ? `${window.location.protocol}//${window.location.hostname.replace(/:\d+$/, '')}:3002/api/trpc`
+              : 'http://localhost:3002/api/trpc',
+          headers: () => ({
+            'x-user-id': storedUserId,
+          }),
+        }),
+      ],
+    }));
+  }, []);
+
+  if (!userId) {
+    return null; // Or a loading spinner
+  }
+
+  return (
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <TooltipProvider>
+            <AppProvider userId={userId}>
+              <BrowserRouter>
+                <AppContent />
+              </BrowserRouter>
+            </AppProvider>
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </trpc.Provider>
+  );
+}
 
 export default App;

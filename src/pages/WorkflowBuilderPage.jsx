@@ -6,8 +6,9 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, MessageSquare, GitBranch, Play, Loader2, Download, FileJson, FileText, FileCode, FileX2, FolderOpen, Plus } from "lucide-react";
+import { Settings, MessageSquare, GitBranch, Play, Loader2, Download, FileJson, FileText, FileCode, FileX2, FolderOpen, Plus, LogOut } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useNavigate } from 'react-router-dom';
 
 import NodePalette from "../components/NodePalette";
 import LabCanvas from "../components/LabCanvas";
@@ -20,11 +21,15 @@ import { exportWorkflowAsJSON as exportAsJson, exportWorkflowAsYAML as exportAsY
 import { trpc } from "../lib/trpc";
 import { toast } from "@/components/ui/use-toast";
 import WorkflowExecutionEngine from "../lib/WorkflowExecutionEngine";
+import { useApp } from '@/context/AppContext';
 
 const WorkflowBuilderPage = () => {
+  const { userId, activeProvider, apiKey } = useApp();
+  const navigate = useNavigate();
+
   // tRPC queries
-  const { data: workflows, refetch: refetchWorkflows } = trpc.workflow.list.useQuery({ userId: "demo-user" }, {
-    enabled: true,
+  const { data: workflows, refetch: refetchWorkflows } = trpc.workflow.list.useQuery({ userId }, {
+    enabled: !!userId,
     retry: false,
     onError: (error) => {
       console.log('Backend not available, using localStorage fallback');
@@ -33,7 +38,7 @@ const WorkflowBuilderPage = () => {
 
   const [workflow, setWorkflow] = useState(() => {
     // Try to load saved workflow from localStorage
-    const saved = localStorage.getItem('current-workflow');
+    const saved = localStorage.getItem(`current-workflow-${userId}`);
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -56,24 +61,22 @@ const WorkflowBuilderPage = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   
-  // Settings state (inherited from original ChatPage)
-  const [apiKey, setApiKey] = useState(() => sessionStorage.getItem('openai_api_key') || '');
+  // Settings state
   const [systemMessage, setSystemMessage] = useState(() => 
     sessionStorage.getItem('system_message') || 'You are processing a semantic logic workflow.'
   );
   
   // Save workflow to localStorage when it changes
   useEffect(() => {
-    if (workflow) {
-      localStorage.setItem('current-workflow', JSON.stringify(workflow));
+    if (workflow && userId) {
+      localStorage.setItem(`current-workflow-${userId}`, JSON.stringify(workflow));
     }
-  }, [workflow]);
+  }, [workflow, userId]);
   
   // Save settings to sessionStorage
   useEffect(() => {
-    sessionStorage.setItem('openai_api_key', apiKey);
     sessionStorage.setItem('system_message', systemMessage);
-  }, [apiKey, systemMessage]);
+  }, [systemMessage]);
   
   // Workflow management functions
   const createNewWorkflow = () => {
@@ -228,237 +231,176 @@ const WorkflowBuilderPage = () => {
     }, 500);
   };
   
+  const handleLogout = () => {
+    // This is a simplified "logout" that sends the user back to the setup page
+    // to re-configure their provider.
+    navigate('/setup');
+  };
+
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen w-screen flex flex-col bg-background text-foreground">
       {/* Header */}
-      <div className="h-16 bg-card border-b border-border flex items-center justify-between px-6 shrink-0 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-white">
-                <path d="M12 2L2 7.5L12 13L22 7.5L12 2Z" fill="currentColor"/>
-                <path d="M2 16.5L12 22L22 16.5L12 11L2 16.5Z" fill="currentColor"/>
-              </svg>
-            </div>
-            <h1 className="text-xl font-semibold text-foreground">
-              Semantic Logic AI Workflow Builder
-            </h1>
-          </div>
-          <Badge variant="outline" className="border-border text-muted-foreground bg-muted/30">Beta</Badge>
-        </div>
-        
+      <header className="flex items-center justify-between p-2 border-b border-border">
         <div className="flex items-center gap-2">
-          <Button
-            variant={activeTab === 'canvas' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setActiveTab('canvas')}
-            className="text-xs"
-          >
-            <GitBranch className="h-3 w-3 mr-1" />
-            Canvas
-          </Button>
-          <Button
-            variant={activeTab === 'test' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setActiveTab('test')}
-            className="text-xs relative"
-          >
-            <MessageSquare className="h-3 w-3 mr-1" />
-            Test
-            {chatMessages.length > 0 && (
-              <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></div>
-            )}
-          </Button>
-          <div className="w-px h-4 bg-border mx-1" />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="bg-background border-border">
-                <FolderOpen className="h-4 w-4 mr-2" />
-                Workflows
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64" sideOffset={5}>
-              <DropdownMenuItem onClick={createNewWorkflow}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Workflow
-              </DropdownMenuItem>
-              {workflows && workflows.length > 0 && (
-                <>
-                  <DropdownMenuItem disabled>
-                    <span className="text-xs text-muted-foreground">Recent Workflows:</span>
-                  </DropdownMenuItem>
-                  {workflows.slice(0, 5).map((wf) => (
-                    <DropdownMenuItem
-                      key={wf.id}
-                      onClick={() => loadWorkflow(wf.id)}
-                      className="flex flex-col items-start"
-                    >
-                      <span className="font-medium">{wf.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(wf.updatedAt).toLocaleDateString()}
-                      </span>
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Input
+          <GitBranch className="h-6 w-6 text-primary" />
+          <h1 className="text-lg font-bold">Semantic Canvas</h1>
+          <Badge variant="outline">{activeProvider?.name || 'No Provider'}</Badge>
+        </div>
+        <div className="flex-1 mx-4">
+          <Input 
             value={workflow.metadata.title}
-            onChange={(e) => setWorkflow(prev => ({
-              ...prev,
-              metadata: { ...prev.metadata, title: e.target.value }
-            }))}
-            className="w-64 bg-background border-border"
-            placeholder="Workflow title..."
+            onChange={(e) => setWorkflow(prev => ({ ...prev, metadata: { ...prev.metadata, title: e.target.value } }))}
+            className="w-full max-w-md mx-auto text-center"
           />
+        </div>
+        <div className="flex items-center gap-2">
           <ThemeToggle />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="bg-background border-border">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent sideOffset={5}>
-              <DropdownMenuItem onClick={() => exportAsJson(workflow)}>
-                <FileJson className="h-4 w-4 mr-2" />
-                Export as JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportAsYaml(workflow)}>
-                <FileCode className="h-4 w-4 mr-2" />
-                Export as YAML
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportAsMarkdown(workflow)}>
-                <FileText className="h-4 w-4 mr-2" />
-                Export as Markdown
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportAsXml(workflow)}>
-                <FileX2 className="h-4 w-4 mr-2" />
-                Export as XML
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <ConfigurationModal
-            apiKey={apiKey}
-            setApiKey={setApiKey}
+          <Button variant="ghost" size="icon" onClick={handleLogout}>
+            <LogOut className="h-4 w-4" />
+          </Button>
+          <ClearSessionButton />
+          <ConfigurationModal 
             systemMessage={systemMessage}
             setSystemMessage={setSystemMessage}
           />
-          <ClearSessionButton />
         </div>
-      </div>
-      
+      </header>
+
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          {/* Left Panel - Node Palette & AI Converter */}
-          <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
-            <div className="h-full flex flex-col bg-card border-r border-border">
-              <div className="flex-1 min-h-0">
-                <NodePalette />
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
+        {/* Left Panel */}
+        <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+          <div className="flex flex-col h-full">
+            <div className="p-2 border-b border-border">
+              <h2 className="text-md font-semibold">Tools</h2>
+            </div>
+            <ScrollArea className="flex-1">
+              <NodePalette />
+              <TextToWorkflow onWorkflowGenerated={handleWorkflowGenerated} />
+            </ScrollArea>
+            <div className="p-2 border-t border-border">
+              <h2 className="text-md font-semibold">Workflows</h2>
+              <div className="mt-2 space-y-2">
+                <Button onClick={createNewWorkflow} variant="outline" className="w-full">
+                  <Plus className="mr-2 h-4 w-4" /> New
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full">
+                      <FolderOpen className="mr-2 h-4 w-4" /> Load
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {workflows && workflows.map(wf => (
+                      <DropdownMenuItem key={wf.id} onClick={() => loadWorkflow(wf.id)}>
+                        {wf.title}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              <TextToWorkflow onWorkflowGenerated={handleWorkflowGenerated} apiKey={apiKey} />
             </div>
-          </ResizablePanel>
-          
-          <ResizableHandle withHandle />
-          
-          {/* Main Canvas Area */}
-          <ResizablePanel defaultSize={75}>
-            <div className="h-full">
-              {activeTab === 'canvas' ? (
-                <LabCanvas
-                  workflow={workflow}
-                  onWorkflowChange={handleWorkflowChange}
-                  onExecuteWorkflow={handleExecuteWorkflow}
-                  isExecuting={isExecuting}
-                />
-              ) : (
-              <ResizablePanelGroup direction="vertical">
-                {/* Canvas (always visible) */}
-                <ResizablePanel defaultSize={chatMessages.length === 0 ? 85 : 60} minSize={40}>
-                  <LabCanvas
-                    workflow={workflow}
-                    onWorkflowChange={handleWorkflowChange}
-                    onExecuteWorkflow={handleExecuteWorkflow}
-                    isExecuting={isExecuting}
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Center Panel */}
+        <ResizablePanel defaultSize={55}>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+            <TabsList className="m-2">
+              <TabsTrigger value="canvas">Canvas</TabsTrigger>
+              <TabsTrigger value="test">Test & Execute</TabsTrigger>
+            </TabsList>
+            <TabsContent value="canvas" className="flex-1">
+              <LabCanvas 
+                workflow={workflow} 
+                onWorkflowChange={handleWorkflowChange} 
+                apiKey={apiKey}
+                providerId={activeProvider?.providerId}
+                userId={userId}
+              />
+            </TabsContent>
+            <TabsContent value="test" className="flex-1 p-4">
+              <Card className="h-full flex flex-col">
+                <CardHeader>
+                  <CardTitle>Workflow Execution</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col gap-4">
+                  <div className="flex items-center gap-4">
+                    <Button onClick={handleExecuteWorkflow} disabled={isExecuting}>
+                      {isExecuting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      Execute Workflow
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline">
+                          <Download className="mr-2 h-4 w-4" /> Export
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => exportAsJson(workflow)}>
+                          <FileJson className="mr-2 h-4 w-4" /> JSON
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportAsYaml(workflow)}>
+                          <FileText className="mr-2 h-4 w-4" /> YAML
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportAsMarkdown(workflow)}>
+                          <FileCode className="mr-2 h-4 w-4" /> Markdown
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportAsXml(workflow)}>
+                          <FileX2 className="mr-2 h-4 w-4" /> XML
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <ScrollArea className="flex-1 border rounded-md p-4">
+                    <pre className="text-sm whitespace-pre-wrap">
+                      {chatMessages.map((msg, index) => (
+                        <div key={index} className={`mb-2 p-2 rounded-md ${msg.role === 'user' ? 'bg-muted' : 'bg-primary/10'}`}>
+                          <strong>{msg.role === 'user' ? 'You' : 'AI'}:</strong> {msg.content}
+                        </div>
+                      ))}
+                    </pre>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Right Panel */}
+        <ResizablePanel defaultSize={25} minSize={15} maxSize={35}>
+          <div className="p-4 h-full flex flex-col">
+            <h2 className="text-lg font-semibold mb-4">Chat Interface</h2>
+            <Card className="flex-1 flex flex-col">
+              <CardContent className="flex-1 p-4">
+                <ScrollArea className="h-full">
+                  {/* Chat messages will be displayed here */}
+                </ScrollArea>
+              </CardContent>
+              <div className="p-4 border-t">
+                <div className="relative">
+                  <Input 
+                    placeholder="Chat with your workflow..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
                   />
-                </ResizablePanel>
-                
-                {/* Test Panel (only when there are messages or when executing) */}
-                {(chatMessages.length > 0 || isExecuting) && (
-                  <>
-                    <ResizableHandle withHandle />
-                    <ResizablePanel defaultSize={chatMessages.length === 0 ? 15 : 40} minSize={15} maxSize={60}>
-                      <div className="h-full flex flex-col bg-muted/20">
-                        <div className="border-b border-border bg-card px-4 py-2">
-                          <h3 className="font-medium text-sm">Execution Results</h3>
-                        </div>
-                        <div className="flex-1 flex flex-col overflow-hidden">
-                          <ScrollArea className="flex-1 p-4">
-                            <div className="space-y-4">
-                              {chatMessages.map((message, index) => (
-                                <Card key={index} className={
-                                  message.role === 'user' ? 'ml-12 bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800' :
-                                  message.role === 'system' ? 'mx-4 bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700' :
-                                  'mr-12 bg-white dark:bg-gray-900'
-                                }>
-                                  <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">
-                                      {message.role === 'user' ? 'User Input' :
-                                       message.role === 'system' ? 'System' : 'AI Response'}
-                                    </CardTitle>
-                                  </CardHeader>
-                                  <CardContent className="pt-0">
-                                    <pre className="text-sm text-foreground whitespace-pre-wrap font-sans">
-                                      {message.content}
-                                    </pre>
-                                  </CardContent>
-                                </Card>
-                              ))}
-                              {isExecuting && (
-                                <Card className="mr-12 bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800">
-                                  <CardContent className="pt-4">
-                                    <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      Processing workflow...
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              )}
-                            </div>
-                          </ScrollArea>
-                          
-                          <div className="border-t border-border bg-card p-4 shrink-0">
-                            <form onSubmit={handleChatSubmit} className="flex gap-2">
-                              <Input
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                placeholder="Test your workflow or ask questions..."
-                                className="flex-1"
-                                disabled={isExecuting}
-                              />
-                              <Button type="submit" disabled={isExecuting || !chatInput.trim()}>
-                                {isExecuting ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Play className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </form>
-                          </div>
-                        </div>
-                      </div>
-                    </ResizablePanel>
-                  </>
-                )}
-              </ResizablePanelGroup>
-            )}
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+                  <Button size="sm" className="absolute right-1 top-1/2 -translate-y-1/2">
+                    Send
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 };

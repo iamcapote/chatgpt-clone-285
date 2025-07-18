@@ -16,7 +16,7 @@ const ProviderSetup = ({ userId, onComplete }) => {
   const { toast } = useToast();
   const [providers, setProviders] = useState([]);
   const [apiKeys, setApiKeys] = useState({});
-  const [selectedProvider, setSelectedProvider] = useState('venice');
+  const [selectedProvider, setSelectedProvider] = useState(null);
   const [showApiKeys, setShowApiKeys] = useState({});
   const [isValid, setIsValid] = useState(false);
 
@@ -28,16 +28,22 @@ const ProviderSetup = ({ userId, onComplete }) => {
     if (initialProviders) {
       setProviders(initialProviders);
       const initialApiKeys = {};
+      let activeProviderId = null;
       const hasValidProvider = initialProviders.some(p => {
         const key = SecureKeyManager.getApiKey(p.providerId);
+        if (p.isActive) {
+          activeProviderId = p.providerId;
+        }
         if (key) {
           initialApiKeys[p.providerId] = key;
-          return true;
+          return p.isActive; // A provider is valid if it's active and has a key
         }
         return false;
       });
       setApiKeys(initialApiKeys);
       setIsValid(hasValidProvider);
+      // Set the selected tab to the active provider, or the first one
+      setSelectedProvider(activeProviderId || (initialProviders.length > 0 ? initialProviders[0].providerId : null));
     }
   }, [initialProviders]);
 
@@ -52,12 +58,22 @@ const ProviderSetup = ({ userId, onComplete }) => {
 
   const handleApiKeyChange = (providerId, value) => {
     setApiKeys(prev => ({ ...prev, [providerId]: value }));
-    const hasValidProvider = providers.some(p => apiKeys[p.providerId] && apiKeys[p.providerId].trim() !== '');
+    const hasValidProvider = providers.some(p => p.isActive && apiKeys[p.providerId] && apiKeys[p.providerId].trim() !== '');
     setIsValid(hasValidProvider);
   };
 
   const handleSaveAndContinue = async () => {
     try {
+      const activeProvider = providers.find(p => p.isActive);
+      if (!activeProvider) {
+        toast({ title: "No Active Provider", description: "Please select and activate a provider.", variant: "destructive" });
+        return;
+      }
+      if (!apiKeys[activeProvider.providerId] || apiKeys[activeProvider.providerId].trim() === '') {
+        toast({ title: "API Key Missing", description: `Please provide an API key for ${activeProvider.name}.`, variant: "destructive" });
+        return;
+      }
+
       // Store keys in session storage
       Object.entries(apiKeys).forEach(([providerId, key]) => {
         if (key && key.trim()) {
@@ -67,17 +83,14 @@ const ProviderSetup = ({ userId, onComplete }) => {
 
       // Prepare providers data for backend (without API keys)
       const providersToSave = providers.map(p => {
-        const { apiKey, ...rest } = p;
+        const { apiKey, ...rest } = p; // Ensure apiKey is not sent
         return rest;
       });
 
-      await updateConfigMutation.mutateAsync(providersToSave);
-      
-      // Store the active provider's API key in session storage for immediate use
-      const activeProvider = providers.find(p => p.isActive);
-      if (activeProvider && apiKeys[activeProvider.providerId]) {
-        sessionStorage.setItem('openai_api_key', apiKeys[activeProvider.providerId]);
-      }
+      await updateConfigMutation.mutateAsync({
+        userId,
+        configs: providersToSave,
+      });
       
       toast({ title: "Success", description: "Provider settings saved." });
       
@@ -89,23 +102,28 @@ const ProviderSetup = ({ userId, onComplete }) => {
 
   const handleTestProvider = async (providerId, model) => {
     try {
+      const provider = providers.find(p => p.providerId === providerId);
+      if (!provider) return;
+
+      const modelToTest = model || provider.models[0]; // Use passed model or default to first
       const apiKey = apiKeys[providerId];
       if (!apiKey) {
         toast({ title: "API Key Missing", description: "Please enter an API key for this provider.", variant: "destructive" });
         return;
       }
       const result = await testNodeMutation.mutateAsync({
+        userId,
         nodeId: 'test-node',
         nodeType: 'Test',
         content: 'Hello, this is a test prompt to verify the connection.',
         providerId,
-        model,
+        model: modelToTest,
         apiKey, // Pass key directly to test mutation
         parameters: { temperature: 0.7, max_tokens: 50, top_p: 1 },
       });
       toast({ 
         title: "Test Successful", 
-        description: `${result.provider} responded: "${result.result.substring(0, 50)}..."` 
+        description: `${result.provider} (${result.model}) responded: "${result.result.substring(0, 50)}..."` 
       });
     } catch (error) {
       toast({ title: "Test Failed", description: error.message, variant: "destructive" });
@@ -124,6 +142,8 @@ const ProviderSetup = ({ userId, onComplete }) => {
       ...p,
       isActive: p.providerId === providerId
     })));
+    const hasValidProvider = apiKeys[providerId] && apiKeys[providerId].trim() !== '';
+    setIsValid(hasValidProvider);
   };
 
 
@@ -184,8 +204,8 @@ const ProviderSetup = ({ userId, onComplete }) => {
                       <Input
                         className="bg-white/10 border-white/20 text-white placeholder-white/50 pr-10"
                         type={showApiKeys[provider.providerId] ? "text" : "password"}
-                        value={provider.apiKey}
-                        onChange={(e) => handleProviderUpdate(provider.providerId, 'apiKey', e.target.value)}
+                        value={apiKeys[provider.providerId] || ''}
+                        onChange={(e) => handleApiKeyChange(provider.providerId, e.target.value)}
                         placeholder="Enter your API key..."
                       />
                       <Button
@@ -210,7 +230,7 @@ const ProviderSetup = ({ userId, onComplete }) => {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleTestProvider(provider.providerId, model)}
-                            disabled={!provider.apiKey || testNodeMutation.isLoading}
+                            disabled={!apiKeys[provider.providerId] || testNodeMutation.isLoading}
                             className="h-4 w-4 p-0 text-white/70 hover:text-white"
                           >
                             <TestTube2 className="h-3 w-3" />
@@ -220,16 +240,16 @@ const ProviderSetup = ({ userId, onComplete }) => {
                     </div>
                   </div>
 
-                  {provider.apiKey && (
+                  {apiKeys[provider.providerId] && (
                     <div className="pt-4 border-t border-white/10">
                       <Button
                         variant="outline"
-                        onClick={() => handleTestProvider(provider.providerId, provider.models[0])}
+                        onClick={() => handleTestProvider(provider.providerId)}
                         disabled={testNodeMutation.isLoading}
                         className="w-full bg-white/10 border-white/20 text-white hover:bg-white/20"
                       >
                         <TestTube2 className="h-4 w-4 mr-2" />
-                        Test Connection
+                        Test Connection (using {provider.models[0]})
                       </Button>
                     </div>
                   )}
@@ -241,7 +261,7 @@ const ProviderSetup = ({ userId, onComplete }) => {
 
         <div className="mt-8 flex justify-between items-center">
           <p className="text-blue-100 text-sm">
-            {isValid ? "✓ Ready to proceed" : "Please configure at least one provider with an API key"}
+            {isValid ? "✓ Ready to proceed" : "Please activate a provider and add an API key"}
           </p>
           <Button
             onClick={handleSaveAndContinue}

@@ -10,8 +10,8 @@ export class PromptingEngine {
     this.userId = userId;
   }
 
-  // Mode 1: Text-to-Workflow Conversion
-  async convertTextToWorkflow(textInput, apiKey, providerId = 'venice', model = 'venice-uncensored') {
+    // Mode 1: Text-to-Workflow Conversion
+  async convertTextToWorkflow(textInput, apiKey, providerId = 'openai', model = 'gpt-4o') {
     const systemPrompt = `You are a semantic logic workflow converter. Convert the provided text into a structured workflow using our semantic node ontology.
 
 Available Node Types:
@@ -89,13 +89,13 @@ Position nodes logically from left to right, top to bottom. Use appropriate sema
     }
   }
 
-  // Mode 2: Workflow Execution with Format Control
+      // Mode 2: Workflow Execution with Format Control
   async executeWorkflowWithFormat(workflow, outputFormat = 'json', executionSettings = {}) {
     const {
       temperature = 0.7,
       maxTokens = 1500,
-      providerId = 'venice',
-      model = 'venice-uncensored',
+      providerId = 'openai',
+      model = 'gpt-4o',
       apiKey
     } = executionSettings;
 
@@ -159,8 +159,8 @@ Process the workflow systematically and provide detailed reasoning for each node
     const {
       temperature = 0.7,
       maxTokens = 800,
-      providerId = 'venice',
-      model = 'venice-uncensored',
+      providerId = 'openai',
+      model = 'gpt-4o-mini',
       apiKey
     } = context;
 

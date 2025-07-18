@@ -1,41 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Wand2, Loader2, ChevronDown, ChevronUp, Settings } from "lucide-react";
+import { Wand2, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { trpcVanilla } from '@/lib/trpc-vanilla';
-import PromptingEngine from '@/lib/promptingEngine';
+import { PromptingEngine } from '@/lib/promptingEngine';
+import { useApp } from '@/context/AppContext';
+import { trpc } from '@/lib/trpc';
 
-const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
+const TextToWorkflow = ({ onWorkflowGenerated }) => {
+  const { activeProvider, apiKey, userId } = useApp();
   const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState('venice');
-  const [selectedModel, setSelectedModel] = useState('venice-uncensored');
-  const [availableProviders, setAvailableProviders] = useState([]);
-  const [promptingEngine] = useState(() => new PromptingEngine(trpcVanilla, "demo-user"));
-
-  // Load available providers on component mount
-  useEffect(() => {
-    const loadProviders = async () => {
-      try {
-        const providers = await promptingEngine.getAvailableProviders();
-        setAvailableProviders(providers);
-        if (providers.length > 0) {
-          const activeProvider = providers.find(p => p.isActive) || providers[0];
-          setSelectedProvider(activeProvider.providerId);
-          setSelectedModel(activeProvider.models[0]);
-        }
-      } catch (error) {
-        console.error('Failed to load providers:', error);
-      }
-    };
-    loadProviders();
-  }, [promptingEngine]);
+  const [selectedModel, setSelectedModel] = useState(activeProvider?.models[0] || '');
+  
+  const trpcContext = trpc.useContext();
+  const [promptingEngine] = useState(() => new PromptingEngine(trpcContext, userId));
 
   const handleGenerate = async () => {
     if (!textInput.trim()) {
@@ -47,12 +30,10 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
       return;
     }
     
-    // Get API key from session storage for selected provider
-    const providerApiKey = sessionStorage.getItem(`${selectedProvider}_api_key`) || apiKey;
-    if (!providerApiKey) {
+    if (!activeProvider || !apiKey) {
       toast({
-        title: "API Key Missing",
-        description: `Please configure your ${selectedProvider} API key in settings.`,
+        title: "Provider Not Configured",
+        description: "Please configure your AI provider in the setup page.",
         variant: "destructive",
       });
       return;
@@ -63,8 +44,8 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
     try {
       const result = await promptingEngine.convertTextToWorkflow(
         textInput,
-        providerApiKey,
-        selectedProvider,
+        apiKey,
+        activeProvider.providerId,
         selectedModel
       );
 
@@ -76,7 +57,6 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
           description: `Successfully converted text to workflow using ${result.metadata.generatedBy}`,
         });
         
-        // Clear input after successful generation
         setTextInput('');
       } else {
         throw new Error(result.error);
@@ -93,6 +73,10 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
       setIsLoading(false);
     }
   };
+
+  if (!activeProvider) {
+    return null; // Or a placeholder indicating that a provider needs to be set up
+  }
 
   return (
     <div className="border-t border-border">
@@ -133,18 +117,7 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-sm font-medium">AI Provider</Label>
-                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableProviders.map(provider => (
-                      <SelectItem key={provider.providerId} value={provider.providerId}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input value={activeProvider.name} disabled />
               </div>
 
               <div>
@@ -154,30 +127,23 @@ const TextToWorkflow = ({ onWorkflowGenerated, apiKey }) => {
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableProviders
-                      .find(p => p.providerId === selectedProvider)?.models
-                      .map(model => (
-                        <SelectItem key={model} value={model}>
-                          {model}
-                        </SelectItem>
-                      )) || []}
+                    {activeProvider.models.map(model => (
+                      <SelectItem key={model} value={model}>
+                        {model}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-
-            <Button onClick={handleGenerate} disabled={isLoading || !textInput.trim()} className="w-full">
+            
+            <Button onClick={handleGenerate} disabled={isLoading} className="w-full">
               {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <Wand2 className="mr-2 h-4 w-4" />
-                  Generate Workflow
-                </>
+                <Wand2 className="mr-2 h-4 w-4" />
               )}
+              Generate Workflow
             </Button>
           </div>
         </CollapsibleContent>

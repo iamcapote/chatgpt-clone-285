@@ -30,9 +30,8 @@ const nodeTypes = {
 
 const LabCanvas = ({ 
   workflow, 
-  onWorkflowChange, 
-  onExecuteWorkflow,
-  isExecuting = false 
+  onWorkflowChange,
+  userId,
 }) => {
   const reactFlowWrapper = useRef(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(workflow?.nodes || []);
@@ -135,55 +134,52 @@ const LabCanvas = ({
         ...workflow,
         nodes: flow.nodes,
         edges: flow.edges,
-        viewport: flow.viewport
+        viewport: flow.viewport,
+        metadata: {
+          ...workflow.metadata,
+          updatedAt: new Date().toISOString(),
+        }
       };
       
       try {
-        if (workflow?.id) {
+        if (workflow?.metadata?.id) {
           // Update existing workflow
           await updateWorkflowMutation.mutateAsync({
-            id: workflow.id,
+            id: workflow.metadata.id,
             data: {
               title: workflow.metadata?.title || 'Untitled Workflow',
               description: workflow.metadata?.description,
               content: {
                 nodes: flow.nodes,
                 edges: flow.edges,
-                viewport: flow.viewport
-              }
+                viewport: flow.viewport,
+              },
+              version: (workflow.metadata.version || 0) + 1,
             }
           });
         } else {
           // Create new workflow
-          const newWorkflow = await createWorkflowMutation.mutateAsync({
-            title: workflow?.metadata?.title || 'Untitled Workflow',
-            description: workflow?.metadata?.description || 'A semantic logic workflow',
+          await createWorkflowMutation.mutateAsync({
+            userId: userId,
+            title: workflow.metadata?.title || 'Untitled Workflow',
+            description: workflow.metadata?.description,
             content: {
               nodes: flow.nodes,
               edges: flow.edges,
-              viewport: flow.viewport
-            }
-          });
-          
-          // Update local workflow with the new ID
-          onWorkflowChange({
-            ...workflowData,
-            id: newWorkflow.id,
-            metadata: {
-              ...workflowData.metadata,
-              id: newWorkflow.id
+              viewport: flow.viewport,
             }
           });
         }
+        onWorkflowChange(workflowData); // Update parent state
       } catch (error) {
-        // Fallback to localStorage if API fails
-        localStorage.setItem('current-workflow', JSON.stringify(workflowData));
-        console.log('Workflow saved to localStorage as fallback:', workflowData);
+        // Error is handled by mutation's onError callback
+        // We still save locally
+        localStorage.setItem(`current-workflow-${userId}`, JSON.stringify(workflowData));
       }
     }
-  }, [reactFlowInstance, workflow, createWorkflowMutation, updateWorkflowMutation, onWorkflowChange]);
+  }, [reactFlowInstance, workflow, onWorkflowChange, updateWorkflowMutation, createWorkflowMutation, userId]);
   
-  const onExportWorkflow = useCallback(() => {
+  const onExportWorkflow = (format) => {
     if (reactFlowInstance) {
       const flow = reactFlowInstance.toObject();
       const workflowData = {
@@ -253,8 +249,46 @@ const LabCanvas = ({
     };
   }, [nodes, edges]);
   
+  const onNodeUpdate = (nodeId, data) => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          return { ...node, data: { ...node.data, ...data } };
+        }
+        return node;
+      })
+    );
+  };
+
+  const onNodeEnhance = async (nodeId, enhancementType) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    // This is where you would call your prompting engine
+    // For now, we'll just simulate an update
+    toast({
+      title: "Enhancement Requested",
+      description: `Requesting AI to ${enhancementType} for node: ${node.data.label}.`,
+    });
+
+    // Example of how you might update the node after AI processing
+    setTimeout(() => {
+      onNodeUpdate(nodeId, { 
+        content: `${node.data.content}\n\n[AI Enhanced: ${enhancementType} at ${new Date().toLocaleTimeString()}]`
+      });
+      toast({
+        title: "Node Enhanced",
+        description: `Node ${node.data.label} has been updated.`,
+      });
+    }, 2000);
+  };
+
+  const memoizedNodeTypes = useMemo(() => ({
+    semantic: (props) => <SemanticNode {...props} onUpdate={onNodeUpdate} onEnhance={onNodeEnhance} />
+  }), [onNodeUpdate, onNodeEnhance]);
+
   return (
-    <div className="w-full h-full overflow-hidden" ref={reactFlowWrapper}>
+    <div className="h-full w-full" ref={reactFlowWrapper}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -264,76 +298,39 @@ const LabCanvas = ({
         onInit={setReactFlowInstance}
         onDrop={onDrop}
         onDragOver={onDragOver}
-        nodeTypes={nodeTypes}
+        nodeTypes={memoizedNodeTypes}
         fitView
-        proOptions={{ hideAttribution: true }}
-        className="bg-background dark:bg-gray-900 w-full h-full"
       >
-        <Background 
-          color="hsl(var(--border))" 
-          gap={20} 
-          className="dark:opacity-30" 
-        />
-        <Controls className="bg-card border-border" />
-        <MiniMap 
-          nodeColor={(node) => {
-            const cluster = node.data?.metadata?.cluster;
-            return cluster ? CLUSTER_COLORS[cluster] : '#6B7280';
-          }}
-          className="bg-card border border-border"
-        />
-        
-        {/* Top Panel - Controls */}
-        <Panel position="top-right" className="flex gap-2">
-          <WorkflowExecutionModal 
-            workflow={workflow} 
-            trigger={
-              <Button
-                disabled={isExecuting || nodes.length === 0}
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
-                <Play className="h-4 w-4 mr-1" />
-                {isExecuting ? 'Executing...' : 'Execute'}
-              </Button>
-            }
-          />
-          
-          <Button onClick={onSaveWorkflow} variant="outline" className="bg-card border-border">
-            <Save className="h-4 w-4 mr-1" />
-            Save
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="bg-card border-border">
-                <Download className="h-4 w-4 mr-1" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleExport('json')}>
-                <FileJson className="h-4 w-4 mr-2" />
-                Export as JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('markdown')}>
-                <FileText className="h-4 w-4 mr-2" />
-                Export as Markdown
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('yaml')}>
-                <FileCode className="h-4 w-4 mr-2" />
-                Export as YAML
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('xml')}>
-                <FileX2 className="h-4 w-4 mr-2" />
-                Export as XML
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          <Button onClick={onResetCanvas} variant="outline" className="bg-card border-border">
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Reset
-          </Button>
+        <Controls />
+        <MiniMap />
+        <Background variant="dots" gap={12} size={1} />
+        <Panel position="top-right">
+          <div className="flex gap-2">
+            <Button onClick={onSaveWorkflow} variant="outline" size="sm">
+              <Save className="h-4 w-4 mr-2" /> Save
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => onExportWorkflow('json')}>
+                  <FileJson className="mr-2 h-4 w-4" /> JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onExportWorkflow('yaml')}>
+                  <FileText className="mr-2 h-4 w-4" /> YAML
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onExportWorkflow('markdown')}>
+                  <FileCode className="mr-2 h-4 w-4" /> Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onExportWorkflow('xml')}>
+                  <FileX2 className="mr-2 h-4 w-4" /> XML
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </Panel>
       </ReactFlow>
     </div>

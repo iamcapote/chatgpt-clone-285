@@ -18,8 +18,8 @@ const WorkflowExecutionModal = ({ workflow, trigger, onExecutionComplete }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [outputFormat, setOutputFormat] = useState('json');
-  const [selectedProvider, setSelectedProvider] = useState('venice');
-  const [selectedModel, setSelectedModel] = useState('venice-uncensored');
+  const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [selectedModel, setSelectedModel] = useState('gpt-4o');
   const [temperature, setTemperature] = useState([0.7]);
   const [maxTokens, setMaxTokens] = useState([1500]);
   const [availableProviders, setAvailableProviders] = useState([]);

@@ -16,8 +16,8 @@ const NodeEnhancementModal = ({ node, onNodeUpdate, trigger }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancementType, setEnhancementType] = useState('improve');
-  const [selectedProvider, setSelectedProvider] = useState('venice');
-  const [selectedModel, setSelectedModel] = useState('venice-uncensored');
+  const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
   const [temperature, setTemperature] = useState([0.7]);
   const [maxTokens, setMaxTokens] = useState([800]);
   const [availableProviders, setAvailableProviders] = useState([]);
