@@ -15,13 +15,30 @@ import ProviderSetup from "./components/ProviderSetup"; // Renamed for clarity
 const queryClient = new QueryClient();
 
 const AppContent = () => {
-  const { isLoading, activeProvider, userId } = useApp();
+  const { isLoading, activeProvider, userId, error } = useApp();
   
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
         <div className="animate-spin h-10 w-10 border-b-2 border-white rounded-full"></div>
       </div>
+    );
+  }
+
+  if (error) {
+    console.error('App error:', error);
+    // If there's an error loading provider config, redirect to setup
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/setup" element={
+            <div className="flex items-center justify-center h-screen bg-gray-900">
+              <ProviderSetup userId={userId} onComplete={() => window.location.href = '/workflow'} />
+            </div>
+          } 
+        />
+        <Route path="*" element={<Navigate to="/setup" />} />
+      </Routes>
     );
   }
 
@@ -48,15 +65,7 @@ const AppContent = () => {
 
 function App() {
   const [userId, setUserId] = useState(null);
-  const [trpcClient, setTrpcClient] = useState(() =>
-    trpc.createClient({
-      links: [
-        httpBatchLink({
-          url: 'http://localhost:3002/api/trpc',
-        }),
-      ],
-    })
-  );
+  const [trpcClient, setTrpcClient] = useState(null);
 
   useEffect(() => {
     let storedUserId = localStorage.getItem('userId');
@@ -66,7 +75,7 @@ function App() {
     }
     setUserId(storedUserId);
 
-    setTrpcClient(trpc.createClient({
+    const client = trpc.createClient({
       links: [
         httpBatchLink({
           url: typeof window !== 'undefined' && window.location.hostname.includes('app.github.dev')
@@ -79,11 +88,16 @@ function App() {
           }),
         }),
       ],
-    }));
+    });
+    setTrpcClient(client);
   }, []);
 
-  if (!userId) {
-    return null; // Or a loading spinner
+  if (!userId || !trpcClient) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+        <div className="animate-spin h-10 w-10 border-b-2 border-white rounded-full"></div>
+      </div>
+    );
   }
 
   return (

@@ -9,8 +9,13 @@ export const AppProvider = ({ children, userId }) => {
   const [apiKey, setApiKey] = useState(null);
   const [isProviderLoading, setIsProviderLoading] = useState(true);
 
-  const { data: providers, isLoading: isConfigLoading } = trpc.provider.getConfig.useQuery({ userId }, {
+  const { data: providers, isLoading: isConfigLoading, error } = trpc.provider.getConfig.useQuery({ userId }, {
     enabled: !!userId,
+    retry: 1,
+    onError: (err) => {
+      console.error('Failed to load provider config:', err);
+      setIsProviderLoading(false);
+    }
   });
 
   useEffect(() => {
@@ -22,14 +27,17 @@ export const AppProvider = ({ children, userId }) => {
         setApiKey(key);
       }
       setIsProviderLoading(false);
+    } else if (error) {
+      setIsProviderLoading(false);
     }
-  }, [providers]);
+  }, [providers, error]);
 
   const value = {
     activeProvider,
     apiKey,
     isLoading: isProviderLoading || isConfigLoading,
     userId,
+    error,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
