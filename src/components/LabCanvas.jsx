@@ -179,7 +179,7 @@ const LabCanvas = ({
     }
   }, [reactFlowInstance, workflow, onWorkflowChange, updateWorkflowMutation, createWorkflowMutation, userId]);
   
-  const onExportWorkflow = (format) => {
+  const onExportWorkflow = useCallback((format) => {
     if (reactFlowInstance) {
       const flow = reactFlowInstance.toObject();
       const workflowData = {
@@ -205,34 +205,6 @@ const LabCanvas = ({
     setNodes([]);
     setEdges([]);
   }, [setNodes, setEdges]);
-
-  const handleExport = useCallback((format) => {
-    if (!workflow) return;
-    
-    try {
-      const exportData = exportWorkflow(workflow, format);
-      const blob = new Blob([exportData.content], { type: exportData.mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = exportData.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast({
-        title: "Export Successful",
-        description: `Workflow exported as ${format.toUpperCase()}`,
-      });
-    } catch (error) {
-      toast({
-        title: "Export Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  }, [workflow, toast]);
   
   // Stats for the panel
   const stats = useMemo(() => {
